@@ -23,6 +23,7 @@ test_source_files = [
         'data_sync_config_test',
         'manager_test',
         'periodic_sync_test',
+        'full_sync_test',
     ]
 
 foreach test_file : test_source_files

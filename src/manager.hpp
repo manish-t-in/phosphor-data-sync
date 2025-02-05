@@ -4,6 +4,7 @@
 
 #include "data_sync_config.hpp"
 #include "external_data_ifaces.hpp"
+#include "sync_bmc_data_ifaces.hpp"
 
 #include <filesystem>
 #include <ranges>
@@ -11,6 +12,9 @@
 
 namespace data_sync
 {
+
+using FullSyncStatus = sdbusplus::common::xyz::openbmc_project::control::
+    SyncBMCData::FullSyncStatus;
 
 namespace fs = std::filesystem;
 
@@ -52,6 +56,35 @@ class Manager
     bool containsDataSyncCfg(const config::DataSyncConfig& dataSyncCfg)
     {
         return std::ranges::contains(_dataSyncConfiguration, dataSyncCfg);
+    }
+
+    /**
+     * @brief Initiates a full synchronization between two BMCs.
+     *
+     *        - This method is responsible for initiating the  Full
+     *          synchronization process between two BMCs.
+     *        - The sync process is handled asynchronously.
+     *
+     */
+    sdbusplus::async::task<> startFullSync();
+
+    /**
+     * @brief Helper API that retrieves the sibling BMC IP and returns its
+     *        availability as a boolean.
+     *
+     * @return True if sibling BMC IP is empty; otherwise False.
+     */
+    bool isSiblingBmcNotAvailable()
+    {
+        return _extDataIfaces->siblingBmcIP().empty();
+    }
+
+    /**
+     * @brief Helper API fetches the full sync Dbus status-property.
+     */
+    FullSyncStatus getFullSyncStatus() const
+    {
+        return _syncBMCDataIface.full_sync_status();
     }
 
   private:
@@ -141,6 +174,11 @@ class Manager
      * @brief The list of data to synchronize.
      */
     std::vector<config::DataSyncConfig> _dataSyncConfiguration;
+
+    /**
+     * @brief SyncBMCData Server Interface object
+     */
+    dbus_ifaces::SyncBMCDataIface _syncBMCDataIface;
 };
 
 } // namespace data_sync
