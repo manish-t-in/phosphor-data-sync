@@ -19,7 +19,7 @@ Manager::Manager(sdbusplus::async::context& ctx,
                  std::unique_ptr<ext_data::ExternalDataIFaces>&& extDataIfaces,
                  const fs::path& dataSyncCfgDir) :
     _ctx(ctx), _extDataIfaces(std::move(extDataIfaces)),
-    _dataSyncCfgDir(dataSyncCfgDir)
+    _dataSyncCfgDir(dataSyncCfgDir), _syncBMCDataIface(ctx, *this)
 {
     _ctx.spawn(init());
 }
@@ -29,6 +29,13 @@ sdbusplus::async::task<> Manager::init()
 {
     co_await sdbusplus::async::execution::when_all(
         parseConfiguration(), _extDataIfaces->startExtDataFetches());
+
+    // TODO: Explore the possibility of running FullSync and Background Sync
+    // concurrently
+    if (_extDataIfaces->bmcRedundancy())
+    {
+        co_await startFullSync();
+    }
 
     co_return co_await startSyncEvents();
 }
@@ -127,7 +134,12 @@ sdbusplus::async::task<> Manager::startSyncEvents()
     co_return;
 }
 
-void Manager::syncData(const config::DataSyncConfig& dataSyncCfg)
+// TODO: This isn't truly an async operation — Need to use popen/posix_spawn to
+// run the rsync command asynchronously but it will be handled as part of
+// concurrent sync changes.
+sdbusplus::async::task<bool>
+    // NOLINTNEXTLINE
+    Manager::syncData(const config::DataSyncConfig& dataSyncCfg)
 {
     using namespace std::string_literals;
     std::string syncCmd{"rsync --archive --compress"};
@@ -147,7 +159,10 @@ void Manager::syncData(const config::DataSyncConfig& dataSyncCfg)
         // TODO:
         // Retry and create error log and disable redundancy if retry is failed.
         lg2::error("Error syncing: {PATH}", "PATH", dataSyncCfg._path);
+
+        co_return false;
     }
+    co_return true;
 }
 
 // NOLINTNEXTLINE
@@ -166,8 +181,61 @@ sdbusplus::async::task<>
     {
         co_await sdbusplus::async::sleep_for(
             _ctx, dataSyncCfg._periodicityInSec.value());
-        syncData(dataSyncCfg);
+        co_await syncData(dataSyncCfg);
     }
+    co_return;
+}
+
+// NOLINTNEXTLINE
+sdbusplus::async::task<void> Manager::startFullSync()
+{
+    _syncBMCDataIface.full_sync_status(FullSyncStatus::FullSyncInProgress);
+
+    auto fullSyncStartTime = std::chrono::utc_clock::now();
+
+    auto syncResults = std::vector<bool>();
+    size_t spawnedTasks = 0;
+
+    for (const auto& cfg : _dataSyncConfiguration)
+    {
+        if (isSyncEligible(cfg))
+        {
+            _ctx.spawn(
+                syncData(cfg) |
+                stdexec::then([&syncResults, &spawnedTasks](bool result) {
+                syncResults.push_back(result);
+                spawnedTasks--; // Decrement the number of spawned tasks
+            }));
+            spawnedTasks++;     // Increment the number of spawned tasks
+        }
+    }
+
+    while (spawnedTasks > 0)
+    {
+        co_await sdbusplus::async::sleep_for(_ctx,
+                                             std::chrono::milliseconds(50));
+    }
+
+    auto fullSyncEndTime = std::chrono::utc_clock::now();
+    auto FullsyncElapsedTime = std::chrono::duration_cast<std::chrono::seconds>(
+        fullSyncEndTime - fullSyncStartTime);
+
+    // If any sync operation fails, the FullSync will be considered failed;
+    // otherwise, it will be marked as completed.
+    if (std::ranges::all_of(syncResults,
+                            [](const auto& result) { return result; }))
+    {
+        _syncBMCDataIface.full_sync_status(FullSyncStatus::FullSyncCompleted);
+    }
+    else
+    {
+        _syncBMCDataIface.full_sync_status(FullSyncStatus::FullSyncFailed);
+    }
+
+    // total duration/time diff of the Full Sync operation
+    lg2::info("Elapsed time for full sync: [{DURATION_SECONDS}] seconds",
+              "DURATION_SECONDS", FullsyncElapsedTime.count());
+
     co_return;
 }
 
