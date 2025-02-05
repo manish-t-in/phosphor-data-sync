@@ -8,15 +8,15 @@
 #include <phosphor-logging/lg2.hpp>
 #include <sdbusplus/async/context.hpp>
 #include <sdbusplus/server/manager.hpp>
-#include <xyz/openbmc_project/DataSync/BMCData/common.hpp>
+#include <xyz/openbmc_project/Control/SyncBMCData/common.hpp>
 
 int main()
 {
-    using BMCDataSync =
-        sdbusplus::common::xyz::openbmc_project::data_sync::BMCData;
+    using SyncBMCData =
+        sdbusplus::common::xyz::openbmc_project::control::SyncBMCData;
 
     sdbusplus::async::context ctx;
-    sdbusplus::server::manager_t objManager{ctx, BMCDataSync::namespace_path};
+    sdbusplus::server::manager_t objManager{ctx, SyncBMCData::instance_path};
 
     data_sync::Manager manager{
         ctx, std::make_unique<data_sync::ext_data::ExternalDataIFacesImpl>(ctx),
@@ -25,7 +25,7 @@ int main()
     // clang-tidy currently mangles this into something unreadable
     // NOLINTNEXTLINE
     ctx.spawn([](sdbusplus::async::context& ctx) -> sdbusplus::async::task<> {
-        ctx.request_name(BMCDataSync::interface);
+        ctx.request_name(SyncBMCData::interface);
         co_return;
     }(ctx));
 

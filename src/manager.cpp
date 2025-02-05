@@ -19,7 +19,7 @@ Manager::Manager(sdbusplus::async::context& ctx,
                  std::unique_ptr<ext_data::ExternalDataIFaces>&& extDataIfaces,
                  const fs::path& dataSyncCfgDir) :
     _ctx(ctx), _extDataIfaces(std::move(extDataIfaces)),
-    _dataSyncCfgDir(dataSyncCfgDir)
+    _dataSyncCfgDir(dataSyncCfgDir), _dbusIfaces(ctx, *this)
 {
     _ctx.spawn(init());
 }
@@ -29,6 +29,10 @@ sdbusplus::async::task<> Manager::init()
 {
     co_await sdbusplus::async::execution::when_all(
         parseConfiguration(), _extDataIfaces->startExtDataFetches());
+
+    // TODO: Implement logic to trigger full sync based on the availability of
+    // sibling BMC.
+    co_await startFullSync();
 
     co_return co_await startSyncEvents();
 }
@@ -127,7 +131,9 @@ sdbusplus::async::task<> Manager::startSyncEvents()
     co_return;
 }
 
-void Manager::syncData(const config::DataSyncConfig& dataSyncCfg)
+// NOLINTNEXTLINE
+sdbusplus::async::task<bool>
+    Manager::syncData(const config::DataSyncConfig& dataSyncCfg)
 {
     using namespace std::string_literals;
     std::string syncCmd{"rsync --archive --compress"};
@@ -147,7 +153,9 @@ void Manager::syncData(const config::DataSyncConfig& dataSyncCfg)
         // TODO:
         // Retry and create error log and disable redundancy if retry is failed.
         lg2::error("Error syncing: {PATH}", "PATH", dataSyncCfg._path);
+        co_return false;
     }
+    co_return true;
 }
 
 // NOLINTNEXTLINE
@@ -166,8 +174,52 @@ sdbusplus::async::task<>
     {
         co_await sdbusplus::async::sleep_for(
             _ctx, dataSyncCfg._periodicityInSec.value());
-        syncData(dataSyncCfg);
+        co_await syncData(dataSyncCfg);
     }
+    co_return;
+}
+
+bool Manager::isSiblingBmcAvailable()
+{
+    if (_extDataIfaces->siblingBmcIP().empty())
+    {
+        return true;
+    }
+    return false;
+}
+
+// NOLINTNEXTLINE
+sdbusplus::async::task<void> Manager::startFullSync()
+{
+    std::mutex mtx;
+    std::vector<bool> syncResults;
+    int completedTasks = 0, spawnedTasks = 0;
+
+    for (const auto& cfg : _dataSyncConfiguration)
+    {
+        if (isSyncEligible(cfg))
+        {
+            _ctx.spawn(this->syncData(cfg) |
+                       stdexec::then([&syncResults, this, &mtx](bool result) {
+                {
+                    std::lock_guard<std::mutex> lock(mtx);
+                    syncResults.push_back(result);
+                }
+            }));
+            spawnedTasks++; // Count the number of spawned tasks
+        }
+    }
+
+    while (completedTasks != spawnedTasks)
+    {
+        co_await sdbusplus::async::sleep_for(_ctx,
+                                             std::chrono::milliseconds(50));
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            completedTasks = syncResults.size();
+        }
+    }
+
     co_return;
 }
 
