@@ -10,6 +10,40 @@ TEST_F(ManagerTest, ParseDataSyncCfg)
     using namespace std::literals;
     namespace ed = data_sync::ext_data;
 
+    commonJsonData = R"(
+            {
+                "Files": [
+                    {
+                        "Path": "/file/path/to/sync",
+                        "Description": "Parse test file",
+                        "SyncDirection": "Active2Passive",
+                        "SyncType": "Immediate"
+                    }
+                ],
+                "Directories": [
+                    {
+                        "Path": "/directory/path/to/sync",
+                        "Description": "Parse test directory",
+                        "SyncDirection": "Passive2Active",
+                        "SyncType": "Periodic",
+                        "Periodicity": "PT1S",
+                        "RetryAttempts": 1,
+                        "RetryInterval": "PT10M",
+                        "ExcludeFilesList": ["/directory/file/to/ignore"],
+                        "IncludeFilesList": ["/directory/file/to/consider"]
+                    }
+                ]
+            }
+        )"_json;
+
+    std::filesystem::path dataSyncCommonCfgFile{dataSyncCfgDir /
+                                                "common_test_config.json"};
+    std::ofstream cfgFile(dataSyncCommonCfgFile);
+    ASSERT_TRUE(cfgFile.is_open())
+        << "Failed to open " << dataSyncCommonCfgFile;
+    cfgFile << commonJsonData;
+    cfgFile.close();
+
     std::unique_ptr<ed::ExternalDataIFaces> extDataIface =
         std::make_unique<ed::MockExternalDataIFaces>();
 

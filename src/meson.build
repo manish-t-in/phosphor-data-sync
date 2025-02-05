@@ -10,6 +10,7 @@ rbmc_data_sync_sources = [
         'data_sync_config.cpp',
         'external_data_ifaces.cpp',
         'external_data_ifaces_impl.cpp',
+        'sync_bmc_data_ifaces.cpp',
         'manager.cpp'
         )
   ]
