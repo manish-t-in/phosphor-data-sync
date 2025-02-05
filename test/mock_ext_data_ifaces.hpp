@@ -20,6 +20,10 @@ class MockExternalDataIFaces : public ExternalDataIFaces
     {
         return bmcRole(role);
     }
+    void setBMCRedundancy(const BMCRedundancy& bmcRedundancy)
+    {
+        return this->bmcRedundancy(bmcRedundancy);
+    }
 };
 
 } // namespace data_sync::ext_data
