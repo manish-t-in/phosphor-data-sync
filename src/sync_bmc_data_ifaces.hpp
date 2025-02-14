@@ -52,6 +52,17 @@ class SyncBMCDataIfaces :
     sdbusplus::async::task<> method_call(start_full_sync_t type,
                                          sdbusplus::message_t& msg);
 
+    /**
+     * @brief This function is responsible for setting a specific property
+     *        over D-Bus.
+     *
+     * @param[in] type The property type identifier.
+     * @param[in] status The property enum value.
+     *
+     * @return true on success, false on failure.
+     */
+    bool set_property(full_sync_status_t type, FullSyncStatus status);
+
   private:
     /**
      * @brief Reference to the Manager object.

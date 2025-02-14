@@ -45,4 +45,15 @@ sdbusplus::async::task<>
     co_return _ctx.spawn(_manager.startFullSync());
 }
 
+bool SyncBMCDataIfaces::set_property([[maybe_unused]] full_sync_status_t type,
+                                     FullSyncStatus new_status)
+{
+    if (full_sync_status_ == new_status)
+    {
+        return false;
+    }
+    full_sync_status_ = new_status;
+    return true;
+}
+
 } // namespace data_sync::dbus_iface

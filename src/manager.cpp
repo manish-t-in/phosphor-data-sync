@@ -15,6 +15,9 @@
 namespace data_sync
 {
 
+using FullSyncStatus = sdbusplus::common::xyz::openbmc_project::control::
+    SyncBMCData::FullSyncStatus;
+
 Manager::Manager(sdbusplus::async::context& ctx,
                  std::unique_ptr<ext_data::ExternalDataIFaces>&& extDataIfaces,
                  const fs::path& dataSyncCfgDir) :
@@ -30,9 +33,10 @@ sdbusplus::async::task<> Manager::init()
     co_await sdbusplus::async::execution::when_all(
         parseConfiguration(), _extDataIfaces->startExtDataFetches());
 
-    // TODO: Implement logic to trigger full sync based on the availability of
-    // sibling BMC.
-    co_await startFullSync();
+    if (_extDataIfaces->bmcRedundancy())
+    {
+        co_await startFullSync();
+    }
 
     co_return co_await startSyncEvents();
 }
@@ -191,6 +195,9 @@ bool Manager::isSiblingBmcAvailable()
 // NOLINTNEXTLINE
 sdbusplus::async::task<void> Manager::startFullSync()
 {
+    // set the full sync status on the D-Bus property as FullSyncInProgress
+    _dbusIfaces.full_sync_status(FullSyncStatus::FullSyncInProgress);
+
     std::mutex mtx;
     std::vector<bool> syncResults;
     int completedTasks = 0, spawnedTasks = 0;
@@ -218,6 +225,16 @@ sdbusplus::async::task<void> Manager::startFullSync()
             std::lock_guard<std::mutex> lock(mtx);
             completedTasks = syncResults.size();
         }
+    }
+
+    if (std::ranges::all_of(syncResults,
+                            [](const auto& result) { return result; }))
+    {
+        _dbusIfaces.full_sync_status(FullSyncStatus::FullSyncFailed);
+    }
+    else
+    {
+        _dbusIfaces.full_sync_status(FullSyncStatus::FullSyncCompleted);
     }
 
     co_return;
