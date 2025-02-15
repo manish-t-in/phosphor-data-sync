@@ -7,7 +7,7 @@ After=xyz.openbmc_project.State.BMC.Redundancy.service
 ExecStart=/usr/libexec/phosphor-data-sync/phosphor-rbmc-data-sync-mgr
 Restart=always
 Type=dbus
-BusName=xyz.openbmc_project.DataSync.BMCData
+BusName=xyz.openbmc_project.Control.SyncBMCData
 
 [Install]
 WantedBy=obmc-bmc-active.target
