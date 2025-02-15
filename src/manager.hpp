@@ -13,6 +13,9 @@
 namespace data_sync
 {
 
+using FullSyncStatus = sdbusplus::common::xyz::openbmc_project::control::
+    SyncBMCData::FullSyncStatus;
+
 namespace fs = std::filesystem;
 
 /**
@@ -72,6 +75,11 @@ class Manager
      * @return True if sibling BMC IP is fetched; otherwise False.
      */
     bool isSiblingBmcAvailable();
+
+    /**
+     * @brief Helper API fetches the full sync Dbus status-property.
+     */
+    FullSyncStatus getFullsyncStatus();
 
   private:
     /**

@@ -192,6 +192,11 @@ bool Manager::isSiblingBmcAvailable()
     return false;
 }
 
+FullSyncStatus Manager::getFullsyncStatus()
+{
+    return _dbusIfaces.full_sync_status();
+}
+
 // NOLINTNEXTLINE
 sdbusplus::async::task<void> Manager::startFullSync()
 {
