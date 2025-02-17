@@ -127,7 +127,12 @@ sdbusplus::async::task<> Manager::startSyncEvents()
     co_return;
 }
 
-void Manager::syncData(const config::DataSyncConfig& dataSyncCfg)
+// TODO: This isn't truly an async operation — Need to use popen/posix_spawn to
+// run the rsync command asynchronously but it will be handled as part of
+// concurrent sync changes.
+sdbusplus::async::task<bool>
+    // NOLINTNEXTLINE
+    Manager::syncData(const config::DataSyncConfig& dataSyncCfg)
 {
     using namespace std::string_literals;
     std::string syncCmd{"rsync --archive --compress"};
@@ -147,7 +152,10 @@ void Manager::syncData(const config::DataSyncConfig& dataSyncCfg)
         // TODO:
         // Retry and create error log and disable redundancy if retry is failed.
         lg2::error("Error syncing: {PATH}", "PATH", dataSyncCfg._path);
+
+        co_return false;
     }
+    co_return true;
 }
 
 // NOLINTNEXTLINE
@@ -166,7 +174,7 @@ sdbusplus::async::task<>
     {
         co_await sdbusplus::async::sleep_for(
             _ctx, dataSyncCfg._periodicityInSec.value());
-        syncData(dataSyncCfg);
+        co_await syncData(dataSyncCfg);
     }
     co_return;
 }
