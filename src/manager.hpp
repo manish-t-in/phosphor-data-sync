@@ -85,8 +85,11 @@ class Manager
      *
      * @param[in] dataSyncCfg - The data sync config to sync
      *
+     * @return Returns true if sync succeeds; otherwise, returns false
+     *
      */
-    static void syncData(const config::DataSyncConfig& dataSyncCfg);
+    static sdbusplus::async::task<bool>
+        syncData(const config::DataSyncConfig& dataSyncCfg);
 
     /**
      * @brief A helper to API to monitor data to sync if its changed
